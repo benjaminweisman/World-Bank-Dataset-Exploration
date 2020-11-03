@@ -1,0 +1,448 @@
+---
+title: "Data Display"
+subtitle: "Animations and interactive graphics"
+author: "Tyrone Ryba"
+date: '`r format(Sys.time(), "Last modified: %d %b %Y")`'
+output:
+  bookdown::gitbook:
+    self_contained: true
+    split_by: none
+    sharing: null
+  word_document: default
+  html_document:
+    toc: yes
+    toc_float: yes
+    theme: flatly
+    df_print: paged
+  html_notebook:
+    toc: yes
+    toc_float: yes
+    theme: flatly
+    df_print: paged
+  pdf_document:
+    latex_engine: xelatex
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+editor_options: 
+  chunk_output_type: console
+linkcolor: red
+urlcolor: red
+---
+
+This time, we will learn about a few systems for creating interactive graphics and animations. Some outside guides are useful for reference:
+
+* [Hadley Wickham's Stanford Seminar on ggvis](https://youtu.be/wki0BqlztCo?t=1702), starting at 28:30.
+* [RStudio interactive visualization cheat sheet](https://shiny.rstudio.com/images/shiny-cheatsheet.pdf)
+* [The R Graph Gallery interactive charts](https://www.r-graph-gallery.com/interactive-charts)
+* [Plotly R charts](https://plot.ly/r/)
+* [The Plotly Dash Gallery](https://dash-gallery.plotly.host/Portal/)
+
+# Setup and datasets
+
+Let's start with a set of data from the World Bank, which hosts a large collection of databases on intra- and international prosperity and economic indicators. 
+
+* [World Bank datasets](https://data.worldbank.org/)
+* [World Bank data catalog](https://datacatalog.worldbank.org/)
+
+Our data for today will be an aggregate of [world development indicators](https://data.worldbank.org/topic/economy-and-growth), which describes several hundred economic variables collected in 21 categories (Science & Technology, Infrastructure, Poverty, etc.). More details on each are provided in the corresponding Metadata CSV files. We will focus on the following elements for plots, with descriptions from the metadata spreadsheet.
+
+* Country.Name - Country name
+* Country.Code - Three-letter country code
+* Year - Year from 1960-2015
+* NE.EXP.GNFS.ZS - Exports of goods and services (% of GDP)
+* NY.GNP.PCAP.CN - GNI per capita (current LCU)
+* NE.EXP.GNFS.CN - Exports of goods and services (current LCU)
+* NY.GDP.MKTP.KD - GDP (constant 2005 US$)
+* NY.GDS.TOTL.ZS - Gross domestic savings (% of GDP)
+* NE.CON.PETC.CD - Household final consumption expenditure, etc. (current US$)
+
+We set up our project directory as before, with "3_Topic_en_csv_v2.csv" in the Datasets directory of Project:
+
+```{r}
+#install.packages('data.table')
+#install.packages('reshape2')
+#install.packages('ggplot2')
+#install.packages('tidyverse')
+#install.packages('plotly')
+#install.packages('listviewer')
+#install.packages('gapminder')
+  library(data.table)
+  library(tidyverse)
+  library(ggplot2)
+  library(plotly)
+  library(listviewer)
+  library(gapminder)
+
+  # World bank dataset
+  world <- fread("3_Topic_en_csv_v2.csv", header=TRUE)
+
+  
+```
+
+Next, we perform some generic munging steps and create a plot to start with.
+
+```{r}
+  
+  # Remove empty 2015 column, long name code column
+  world <- world[,-c(3,60), with=F]
+  
+  # Subset for smaller plots
+  set.seed(1234)
+  world.subset <- world[sample(1:nrow(world), 10000),]
+
+  # Create a tidier version (features as columns, observations as rows)
+  world.ts <- as_tibble(world.subset)
+  world.ts <- gather(world.ts, Year, "Value", 4:58) # Collapse year columns into one
+  names(world.ts) <- make.names(names(world.ts))        # Standardize names  
+  world.ts <- spread(world.ts, Indicator.Code, Value)   # Spread Indicator.Code to multiple columns
+  
+  View(world.ts[1:1000,])
+  # Check missingness proportion (from validation notes)
+  na.prop <- apply(world.ts, 2, function(x) sum(is.na(x)/length(x)) )
+
+  # We select some variables of interest 
+  na.prop[order(na.prop)][4:20]
+    
+  # What are the names of elements with few NAs?
+  meta <- fread("Metadata_Indicator.csv", header=TRUE) # From metadata indicator .csv
+  data.frame(names(na.prop[order(na.prop)][4:20]),
+             meta[meta$INDICATOR_CODE %in% names(na.prop[order(na.prop)][4:20]),]$INDICATOR_NAME)
+
+```
+
+# Interactive graphics
+
+## Base-R
+
+The base R distribution starts with several functions that can be used interactively. A common one is identify(). With identify(), we can store the identities of points in a given base-R plot. This can be useful to collect these points separately for analysis.
+
+_Q1. Create a time series plot using world.ts$Year, select a few points using identify, and assign these to a variable called point.ind._
+
+```{r}
+
+# windows()
+# X11()
+
+  # Plot trade in services percentage per year
+plot(
+  x = jitter(as.numeric(world.ts$Year)),
+  y = world.ts$BG.GSR.NFSV.GD.ZS,
+  col = as.factor(world.ts$Country.Name),
+  xlim = c(2003, 2020),
+  pch = 19
+)
+
+  # Identify points until <ESC> or "Finish"
+  point.ind <- identify(as.numeric(world.ts$Year), world.ts$BG.GSR.NFSV.GD.ZS)
+  
+  # Identify n points
+  point.ind <- identify(as.numeric(world.ts$Year), world.ts$BG.GSR.NFSV.GD.ZS, n=2)
+  world[point.ind,]
+  
+  row.names(world.ts) <- world.ts$Country.Code
+
+  # Similar methods for iris:
+  # Test: are row indices or names collected?
+  row.names(iris) <- 1001:1150
+  
+  plot(iris$Sepal.Width, iris$Sepal.Length, pch=19, col=iris$Species)
+  point.ind <- identify(iris$Sepal.Width, iris$Sepal.Length, n=2)
+  iris[point.ind,]
+
+```
+
+_Q2. Use the row indices to collect information from other variables in world.ts from the points you identified._
+
+```{r}
+
+world.ts %>% slice(point.ind)
+  
+```
+
+Similar identification can be done for ggplot2 plots, though requires a pass-through to the grid system that ggplot2 panels are built on.  See, e.g., the ggidentify() function in https://bioinfo.iric.ca/identifying-a-point-in-ggplot2/.
+
+```{r, eval=FALSE}
+library(grid)
+
+# ggplot point identification:
+gp <-
+  iris %>% ggplot(aes(x = Petal.Length, y = Petal.Width, col = Species)) +
+  geom_point() + geom_smooth(method = "lm") +
+  theme_light()
+gp
+ggidentify(gp)
+
+# Outliers in exports vs. net GDP per capita:
+gp <- ggplot(world.ts, aes(NY.GDP.MKTP.KD, NE.GDI.TOTL.KD)) + 
+  geom_point() + geom_smooth() +
+  xlim(0, 1.3e11) + ylim(0, 4.1e10) +
+  xlab("GDP - Constant 2005 $") + ylab("Gross capital formation - 2005 $") +
+  theme_light()
+
+# windows()
+gp
+ggidentify(gp)
+
+```
+
+## ggvis
+
+In addition to ggplot, Hadley Wickham and others have been developing ggvis as a system for interactive visualization on the web.
+
+There are two main ideas behind ggvis. First, the relationship between layers in a plot should be inheritable: a plot that creates a smoothed line should be able to collect the parameters of that line from earlier layers or aesthetics. Second, with the increasing popularity of online notebooks (like RMarkdown, iPython notebooks and Jupyter, etc.), the plotting system should be designed with online, reactive display and interactivity in mind. Development of ggvis has a long way to go as of writing, but these will be the main guideposts.
+
+## qvis vs. ggvis syntax
+
+Like ggplot2's qplot, qvis provides simpler interface for creating ggvis plots that don't require many layers. The 'qvis()' function itself has now been deprecated; instead, plots without additional layers can use a qplot-like syntax by default: 
+
+```{r}
+
+  # install.packages("ggvis")
+  library(ggvis)
+
+  # qvis syntax (deprecated!)
+  # ggvis(iris, x = ~Sepal.Width, y = ~Petal.Width, shape="line")
+
+
+
+```
+
+To become more comfortable with ggvis (and dplyr) syntax, we should generally work with the forward pipe operator, '%>%'. For those used to working with the standard pipe operator in the Linux or UNIX terminal, recall that '%>%' operates similarly but in reverse, with the output from each argument acting as input to the next. For example:
+
+```{r}
+  
+  # Standard functional syntax
+  # layer_points(ggvis(iris, x = ~Sepal.Width, y = ~Petal.Width, fill:="grey"))
+  
+  # Equivalent forward pipe syntax
+  iris %>% ggvis(~Sepal.Width, ~Petal.Width, fill:="grey") %>% layer_points()
+  
+  # Points colored by species
+  iris %>% ggvis(~Sepal.Width, ~Petal.Width) %>% layer_points(fill = ~Species)
+  
+  # Points colored and stacked by species
+  iris %>% ggvis(~Sepal.Width, ~Petal.Width) %>% layer_points(~Species, fill = ~Species)
+  
+  # Pointed colored and modeled separately after grouping
+  iris %>% ggvis(~Sepal.Width, ~Petal.Width) %>% 
+    group_by(Species) %>% 
+    layer_points(fill = ~Species) %>%
+    layer_model_predictions(model = "loess", se = TRUE)
+
+  
+```
+
+The '%>%' operator integrates nicely with the properties of ggvis plots. They can work seamlessly with dplyr in that select, mutate, or other modifications can be performed to the dataset before plotting or at any layer in the plot, and without assigning subsets or other aggregates to an intermediate variable beforehand. More examples of using the pipe operator in ggvis and other packages can be found in ?'%>%'. For a current mapping of ggvis layers to ggplot2 geoms, see the [related guide](https://ggvis.rstudio.com/layers.html).
+
+## ggvis and reactivity
+
+In separating the stages of processing in this way, ggvis plots can be easily made reactive. 
+
+### Sliders
+
+Sliders can be added to an existing plot by substituting the input_slider function to a range, as done here:
+
+```{r}
+
+mtcars %>% ggvis(~wt, ~mpg) %>% layer_points(fill=~cyl) %>%
+  layer_smooths(span = input_slider(0.2, 1), se=TRUE)
+
+```
+
+### Select boxes
+
+Sliders, select boxes, and the impact of smoothing kernel functions and span are nicely demonstrated by a closely related example on RStudio's guide:
+
+```{r, eval=FALSE}
+  
+   ggvis(mtcars, ~wt) %>%
+    layer_densities(
+      adjust = input_slider(.1, 2, value = 1, step = .1, label = "Bandwidth adjustment"),
+      kernel = input_select(
+        c("Gaussian" = "gaussian",
+          "Epanechnikov" = "epanechnikov",
+          "Rectangular" = "rectangular",
+          "Triangular" = "triangular",
+          "Biweight" = "biweight",
+          "Cosine" = "cosine",
+          "Optcosine" = "optcosine"),
+        label = "Kernel")
+    )
+
+```
+
+## Plotly and ggplotly
+
+Plotly (https://plot.ly/r/) is another useful system that interfaces smoothly with ggplot for most standard plot types.  We will look at a few examples, but see the [Plotly graph gallery](https://plot.ly/r). Individual graphics packages, like [iheatmapr](https://github.com/ropensci/iheatmapr), have also been developed using plotly functions. Plotly frameworks have also been developed for [Python](https://plotly.com/python/) and [Javascript](https://plotly.com/javascript/) and are widely used.
+
+### Plotly graphics
+
+```{r}
+
+# Check available trace/plot types
+# install.packages("listviewer")
+# schema()
+
+# Adapted from https://plotly.com/r/3d-axes/
+library(plotly)
+
+# 2d version:
+plot_ly(z = ~volcano, type = "heatmap")
+
+# 3d version:
+plot_ly(z = ~volcano) %>% add_surface(showscale=FALSE)
+
+
+# A ternary scatterplot to show 3(+) dimensions:
+diamonds %>% 
+  sample_n(1000) %>%
+  plot_ly(
+    a = ~ x,
+    b = ~ y,
+    c = ~ z,
+    text = ~paste(" Color: ", color, "\n", "Clarity: ", clarity),
+    size = ~carat,
+    color = ~color,
+    alpha = 0.2,
+    type = "scatterternary",
+    mode = "markers"
+  )
+
+
+# A similar plot using RGL
+#install.packages("rgl")
+library(rgl)
+# diamonds %>%
+#   sample_n(1000) %>%
+#   as.data.frame() %>%
+#   plot3d(x, y, z, type = "s")
+diam.df <-
+  diamonds %>% 
+  sample_n(1000) %>%
+  rename(xval = x, yval = y, zval = z) 
+with(diam.df, plot3d(xval, yval, zval, type = "s", size = 0.7, col = as.numeric(carat)))
+
+# See schema() to view available plot types and attributes (parameters)
+# schema()
+
+diamonds %>% 
+  sample_n(1000) %>%
+  plot_ly(
+    x = ~ x,
+    y = ~ y,
+    size = ~carat,
+    color = ~color,
+    alpha = 0.2,
+    type = "pointcloud"
+  )
+
+
+diamonds %>% 
+  sample_n(1000) %>%
+  plot_ly(
+    x = ~ x,
+    y = ~ y,
+    size = ~carat,
+    color = ~color,
+    alpha = 0.2,
+    type = "scatter",
+    mode = "markers"
+  )
+
+
+```
+
+### Plotly ggplot2 integration
+
+Most plotly graphs can be greated directly from analogous plots from ggplot2, using the ggplotly function. 
+
+```{r}
+
+gp <- ggplot(mpg, aes(displ, cty, size = as.factor(cyl))) +
+  geom_point(aes(fill = fl, alpha = 0.4), colour = "black", shape = 21) +
+  facet_wrap( ~ fl)
+gp
+
+ggplotly(gp)
+
+```
+
+
+### Plotly Dash
+
+Plotly graphics can now be combined into dashboards with shared views.  For some examples, see
+https://dash-gallery.plotly.host.
+
+## Other systems
+* R Shiny (to be covered more next time)
+* D3 in R, [htmlwidgets](http://www.htmlwidgets.org/showcase_leaflet.html)
+* iPlots and Acinonyx (offshoot for GPU processing of larger datasets)
+
+# Animations
+
+### Animations in Plotly
+
+
+### Lennard-Jones clustering example
+
+
+### Mortality rate example
+
+The following is an animation from Rob Hyndman of Monash University (see https://robjhyndman.com/hyndsight/animations/#disqus_thread):
+
+```{r, eval=FALSE}
+# install.packages('demography')
+
+  nyears = 10
+  library(demography)
+  nyears <- length(fr.mort$year)
+  for(i in 1:nyears)
+  {
+      pdf(paste("frmale",i,".pdf",sep=""),height=4,width=6.5)
+      x <- fr.mort
+      if(i<nyears)
+          x$rate$male[,(i+1):nyears] <- NA
+      plot(x,series="male",ylim=c(-9.5,1.5),
+          main=paste("French: male mortality (",fr.mort$year[1]-1+i,")",sep=""))
+      if(i>1)
+          x$rate$male[,1:(i-1)] <- NA
+      lines(x,series='male',lwd=2,col=1)
+      dev.off()
+  }
+
+```
+
+For all of these EDA methods, the key to combine them with a solid understanding of the domain and current problems. EDA can be useful both for finding new relationships in the data and for telling a compelling story. For a good example, see Han's Rosling's [200 Countries, 200 Years, 4 Minutes](https://www.youtube.com/watch?v=jbkSRLYSojo), or related TED talk.
+
+## Additional ggplot2 tie-ins
+
+
+```{r}
+#install.packages('ggforce')
+#install.packages('ggplot2')
+#install.packages('Rcpp')
+library(ggforce)
+library(ggplot2)
+ggplot(iris, aes(Petal.Length, Petal.Width, color = Species)) +
+    geom_point() +
+    facet_zoom(x = Species == "versicolor") + 
+    theme_bw() + 
+    ylab("Petal Width") + 
+    xlab("Petal Length")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
