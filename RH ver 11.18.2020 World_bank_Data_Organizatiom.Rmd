@@ -1,0 +1,419 @@
+---
+title: "Rick Hutchison Mung Project"
+subtitle: "Data organization"
+author: "Rick Hutchison"
+date: '`r format(Sys.time(), "Last modified: %d %b %Y")`'
+output:
+  
+  pdf_document:
+    
+    latex_engine: xelatex
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+  html_document:
+    toc: yes
+    toc_float: yes
+    theme: flatly
+    df_print: paged  
+  bookdown::gitbook:
+    self_contained: true
+    split_by: none
+    sharing: null
+  word_document: default
+  html_notebook:
+    toc: yes
+    toc_float: yes
+    theme: flatly
+    df_print: paged
+editor_options: 
+  chunk_output_type: console
+linkcolor: red
+urlcolor: red
+---
+
+# Setup and datasets
+
+I will be concentrating on these variables.
+
+As folks that will know a lot of data scientist in the future, one of the topics that we wanted to explore was the relationship between charges for the use of intellectual property and other information in this data set. This data set is the development indicators data set from the World Bank.
+
+Other interests were  <  insert ideas here>
+
+Since revenue from intellectual property is most likely to occur in developed nations, we decided to start exploring coountries  from the group of seven - Canada, France, Germany, Italy, Japan, United Kingdom, and the United States.
+
+variables of interest:
+
+gdf NY.GDP.MKTP.CD	GDP (current US$)  
+
+com BX.GSR.CMCP.ZS	Communications, computer, etc. (% of service exports, BoP)
+
+ip BX.GSR.ROYL.CD	Charges for the use of intellectual property, receipts (BoP, current US$)
+
+ed NY.ADJ.AEDU.CD	Adjusted savings: education expenditure (current US$)
+
+inc NY.GSR.NFCY.CD	Net income from abroad (current US$)
+
+
+"NY.ADJ.NNAT.CD","Adjusted savings: net national savings (current US$)"
+
+"NY.ADJ.DPEM.CD","Adjusted savings: particulate emission damage (current US$)"
+
+"NY.ADJ.DNGY.CD","Adjusted savings: energy depletion (current US$)"
+
+"NY.ADJ.DMIN.CD","Adjusted savings: mineral depletion (current US$)"
+
+"NY.ADJ.DFOR.CD","Adjusted savings: net forest depletion (current US$)"
+
+"NY.ADJ.DFOR.CD","Adjusted savings: net forest depletion (current US$)"
+
+"NY.ADJ.DKAP.CD","Adjusted savings: consumption of fixed capital (current US$)"
+
+set working directory
+```{r}
+setwd('/Users/Hutch/Desktop/mung.joint')
+getwd()
+```
+
+
+
+```{r}
+  # install.packages('data.table')
+  # install.packages('reshape2')
+  # install.packages('ggplot2')
+  # install.packages('tidyverse')
+  # install.packages('plotly')
+  # install.packages('listviewer')
+  # install.packages('gapminder')
+  # import Scotch
+  library(data.table)
+  library(tidyverse)
+  library(ggplot2)
+  library(plotly)
+  library(listviewer)
+  library(gapminder)
+library(ggvis)
+
+#install.packages("corrplot")
+# install.packages("RColorBrewer")
+library(corrplot)
+library  (dplyr)
+library(RColorBrewer)
+library(DataExplorer)
+```
+
+Please note that I changed the name of the data set to MP, standing for the mung project.
+
+It is a copy of the original data set - 
+API_3_DS2_en_csv_v2_1567828.csv
+
+import data set (imported from my desktop)
+```{R}
+  # World bank dataset Developement indicators
+  mp.complete <- fread("/Users/Hutch/Desktop/mung.joint/MP.csv", header=TRUE)
+
+
+```
+.Visual inspection of the data showed that for most of the countries, the data was most complete for the years 2011 to 2017.
+
+
+trim data of empty rows.   left with  years [2000-2017]
+```{r}
+  
+ # will
+   # Remove year  columns for years 1960- 1999
+    # leave 2000 - 2017
+    #remove col 3 so my code matches              Dr. Reba's code
+#remove early empty years
+  mp.2017<- mp.complete[,-c(5:44), with=F]
+#view(mp.2017)
+#ncol(mp.2017)
+
+#remove 2018:2020 plus weird extra column
+mp.2017<- mp.2017[,-c(23:26), with=F]
+
+
+#remvove col 3 because Dr. Reba did
+mp.2017 <- mp.2017[,-c(3)]
+
+#view(mp.2017)
+```
+
+
+using one of the new packages whose name I forget but that I will look up
+```{r}
+
+introduce(mp.2017)
+plot_intro(mp.2017)
+dev.print(pdf, "Data 2000 - 2017 Errors.pdf")  
+
+# copies the plot to a thePDFfile
+         
+```
+
+```{R}
+
+str(mp.2017)
+nrow(mp.2017)
+ncol(mp.2017)
+```
+64680 rows
+
+```{R}
+  # Create a tidier version (features as columns, observations as rows)
+#based on code from Dr. R
+  
+# Collapse year columns into one
+mp.ts <- gather(mp.2017, Year, "Value", 4:21)
+#view(mp.ts)
+
+
+# Standardize names  because some of the names have blank spaces
+  names(mp.ts) <- make.names(names(mp.ts))        
+
+  
+mp.ts <- spread(mp.ts, Indicator.Code, Value)   
+# Spread Indicator.Code to multiple columns
+#view(mp.ts) 
+#nrow(mp.ts)
+#ncol(mp.ts)
+```
+
+
+filter out the G7
+```{R}
+
+g7 = filter(mp.ts, Country.Name == 'Canada' | Country.Name == 'Japan' | Country.Name == 'Italy'   | Country.Name == 'Germany'| Country.Name == 'France'| Country.Name == 'United States' | Country.Name == 'United Kingdom' )
+```
+ 
+ 
+ data much cleaner than the whole data set
+```{r}
+
+introduce(g7)
+plot_intro(g7)
+dev.print(pdf, "G7 Errors.pdf") 
+
+```
+
+ 
+ 
+ 
+ Other ways of looking for bad data.  Most of it is complete for these countries.  
+```{R}
+  # Check missingness proportion (from validation notes)
+  na.prop <- apply(g7, 2, function(x) sum(is.na(x)/length(x)) )
+
+#view(na.prop)
+  # We select some variables of interest 
+  #na.prop[order(na.prop)][4:20]  
+  # keep all variable
+
+summary(na.prop)
+```
+
+
+
+```{R}
+
+
+
+```
+
+
+
+simple plot year v gdp all countries
+```{R}
+X11()
+par(mar= c(1,1,1,1))
+  # Plot GDP per year
+plot(
+  x = jitter(as.numeric(g7$Year)),
+  y = g7$NY.GDP.MKTP.CD,
+  col = as.factor(g7$Country.Name),
+  xlim = c(2003, 2020),
+  pch = 19
+)
+```
+
+ggplot
+```{R}
+X11()
+
+g7 = filter(mp.ts, Country.Name == 'Canada' | Country.Name == 'Japan' | Country.Name == 'Italy'   | Country.Name == 'Germany'| Country.Name == 'France'| Country.Name == 'United States' | Country.Name == 'United Kingdom' )
+
+x =as.numeric(g7$Year)
+y = g7$NY.GDP.MKTP.CD
+
+   
+
+gp <- g7 %>%
+ ggplot(aes(x,y, colour= as.factor(Country.Name )))+ geom_point() +
+xlab("Countries")+
+ggtitle('GDP 20090-2017')
+        
+ gp   
+ dev.print(pdf, "G7 Errors.pdf") 
+
+```
+review of interesting columns
+
+GDP NY.GDP.MKTP.CD	GDP (current US$)  
+
+COM  BX.GSR.CMCP.ZS	Communications, computer, etc. (% of service exports, BoP)
+
+INTPROP  BX.GSR.ROYL.CD	Charges for the use of intellectual property, receipts (BoP, current US$)
+
+EDUC NY.ADJ.AEDU.CD	Adjusted savings: education expenditure (current US$)
+
+TRADEINC NY.GSR.NFCY.CD	Net income from abroad (current US$)
+
+NY.GDP.MKTP.CD, BX.GSR.CMCP.ZS, BX.GSR.ROYL.CD, NY.ADJ.AEDU.CD, NY.GSR.NFCY.CD, NY.GSR.NFCY.CD, NY.ADJ.DPEM.CD, NY.ADJ.DNGY.CD, NY.ADJ.DMIN.CD,
+NY.ADJ.DFOR.CD, NY.ADJ.DKAP.CD 
+Here are my columns of interest. 
+
+ADJSAV "NY.ADJ.NNAT.CD","Adjusted savings: net national savings (current US$)"
+
+ADJEMIS "NY.ADJ.DPEM.CD","Adjusted savings: particulate emission damage (current US$)"
+
+ADJENER "NY.ADJ.DNGY.CD","Adjusted savings: energy depletion (current US$)"
+
+AJDMINERAL "NY.ADJ.DMIN.CD","Adjusted savings: mineral depletion (current US$)"
+
+"NY.ADJ.DFOR.CD","Adjusted savings: net forest depletion (current US$)"
+HAS A LOT OF ZEROS 
+
+
+ADJCAP "NY.ADJ.DKAP.CD","Adjusted savings: consumption of fixed capital (current US$)"
+
+
+
+```{R}
+test <-g7 %>% select( Country.Name, Country.Code, Year,NY.GDP.MKTP.CD, BX.GSR.CMCP.ZS, BX.GSR.ROYL.CD, NY.ADJ.AEDU.CD, NY.GSR.NFCY.CD, NY.ADJ.NNAT.CD, NY.ADJ.DPEM.CD, NY.ADJ.DNGY.CD, NY.ADJ.DMIN.CD,
+NY.ADJ.DFOR.CD, NY.ADJ.DKAP.CD)
+
+test2 <- test %>% rename(
+  GDP = NY.GDP.MKTP.CD, 
+  COMM =BX.GSR.CMCP.ZS, 
+  INTPROP = BX.GSR.ROYL.CD,  
+EDUC = NY.ADJ.AEDU.CD,  
+TRADEINC = NY.GSR.NFCY.CD,  
+ADJSAV = NY.ADJ.NNAT.CD,  
+ADJEMIS = NY.ADJ.DPEM.CD, 
+ADJENER =     NY.ADJ.DNGY.CD,  
+AJDMINERAL =  NY.ADJ.DMIN.CD,
+ ADJDEFOR =NY.ADJ.DFOR.CD,  
+ADJCAP = NY.ADJ.DKAP.CD)
+ 
+g.7 <- test2
+
+view(g.7)
+```
+
+```{R}
+if(.Platform$OS.type == "unix") { # Only on unix-alikes, possibly Mac,
+## put something like this is your .Rprofile to customize the defaults
+setHook(packageEvent("grDevices", "onLoad"),
+        function(...) grDevices::X11.options(width = 8, height = 6, xpos = 0,
+                                             pointsize = 10))
+}
+```
+
+
+making plot interactive with plotly
+```{R}
+fig <- ggplotly(gp)
+x11()
+fig
+
+
+```
+
+cannot get this to work
+```{R}
+
+afig <- plot_ly(data = g7, x = ~g7$Year,
+               y = ~g7$gdf NY.GDP.MKTP.CD, colour = 'Country.Name')
+
+afig
+
+X = as.numeric(g7$Year)
+
+bfig <- plot_ly(data = g7, x = ~X,
+               y = ~g7$gdp)
+
+bfig
+
+#fig <- plot_ly(data = iris, x = #~Sepal.Length, y = ~Petal.Length)
+
+#fig
+
+```
+plot again as scatter
+simple scatter
+
+cannot get to work
+```{R}
+#attach(A)
+cfig <- plot_ly(data = g7, x = ~Year,
+               y = ~NY.GDP.MKTP.CD,
+               type = "scatter",
+marker = list(size = 10,
+                             color = 'rgba(255, 182, 193, .9)',
+                             line = list(color = 'rgba(152, 0, 0, .8)',
+                                         width = 2)))
+afig <- afig %>% layout(title = 'xxxx')
+afig
+
+xf
+```
+
+
+
+ 
+ 
+ 
+histogram
+also will not work
+```{R}
+#attach(A)
+dfig <- plot_ly(data = g7, x = ~Year,
+               y = ~gdf NY.GDP.MKTP.CD,
+               type = "bar",
+marker = list(size = 10,
+                             color = 'rgba(255, 182, 193, .9)',
+                             line = list(color = 'rgba(152, 0, 0, .8)',
+                                         width = 2)))
+dfig <- afig %>% layout(title = 'Australia GDP')
+
+dfig
+
+
+```
+
+??????
+```{R}
+
+fig1 <- plot_ly( x = ~Year, y = ~ NY.GDP.MKTP.CD, type = 'scatter', mode = 'lines', name = "GDP")
+
+```
+
+correlatioj package - whole data set
+```{R}
+x11()
+mp.ts %>% select_if(is.numeric) %>% cor() %>%
+  corrplot(type = "lower", tl.col = "black",
+      col = colorRampPalette(brewer.pal(11, "RdBu"))(100))
+
+```
+
+not working
+```{R}
+x11()
+g7 %>% select_if(is.numeric) %>% cor() %>%
+  corrplot(type = "lower", tl.col = "black",
+      col = colorRampPalette(brewer.pal(11, "RdBu"))(100))
+
+```
+
+
