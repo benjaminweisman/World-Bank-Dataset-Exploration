@@ -1,0 +1,138 @@
+---
+title: "Steven Munging Project 2"
+author: "Steven Spielman"
+date: '`r format(Sys.time(), "Last modified: %d %b %Y")`'
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    theme: flatly
+    df_print: paged  
+  pdf_document:
+    latex_engine: xelatex
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+  bookdown::gitbook:
+    self_contained: true
+    split_by: none
+    sharing: null
+  word_document: default
+  html_notebook:
+    toc: yes
+    toc_float: yes
+    theme: flatly
+    df_print: paged
+editor_options: 
+  chunk_output_type: console
+linkcolor: red
+urlcolor: red
+---
+
+# Data Munging Project 2
+Team Badgers
+Steven Spielman RMD
+
+## Introduction
+For this project, the badger team decided to use the World Bank data. When exploring and cleaning the data set, the team decided to look at the most developed countries and over the years 2000-2017, since the data was higher quality over these years. The subsetted data was compiled to a csv and utilized to further explore the data through visualizations.
+
+A variable of interest for the team was in the adjusted net national savings for the G7 countries. The team wanted to explore the relationship between savings and gdp as well as look at how emission adjustments on savings compared across nations. 
+
+```{r message=FALSE}
+  # install.packages('data.table')
+  # install.packages('reshape2')
+  # install.packages('ggplot2')
+  # install.packages('tidyverse')
+  # install.packages('plotly')
+  # install.packages('listviewer')
+  # install.packages('gapminder')
+library(data.table)
+library(tidyverse)
+library(ggplot2)
+library(plotly)
+library(listviewer)
+library(gapminder)
+library(ggvis)
+library(corrplot)
+library (dplyr)
+library(RColorBrewer)
+
+
+  # World bank dataset
+g7<- fread("g.7.csv", header=TRUE)
+```
+The data is read in through the csv in the github repository for the project. 
+
+
+## GDP and Adjusted Net National Savings
+```{r}
+library(grid)
+
+gp <- ggplot(g7, aes(GDP, ADJSAV)) + 
+  geom_point() + geom_smooth() +
+  xlab("GDP in $") + ylab("Adjusted Savings in $") +
+  theme_light()
+
+gp
+```
+
+
+To explore the relationship between GDP and adjusted net national savings for G7 countries, the team created the above visualization, Figure 6a. It includes points for countries across the years 2000-2017. The team decided to include all of these points regardless of year to get an overview of the trend. The relationship between a countries GDP and net national adjusted savings appears to trend positive, but there are a few extreme outliers. The point with the lowest adjusted savings is the most extreme, and was identified as the USA in 2009. While it is an outlier to the data, the values make sense as they are a result of the 2008 recession in the United States.
+
+With this economic context now in mind, the team wanted to see the adjusted net national savings over time and created a heat map.
+```{r}
+p <- ggplot(g7,aes(x=Year,y=Country.Code,fill=ADJSAV))+
+      geom_tile()
+p
+```
+
+
+Figure 7a shows the heat map for adjusted net national savings for G7 countries from 2000-2017. When looking at the USA, the decrease in savings around the years 2008-2009 is apparent. The impact can also be seen in the other nations in that year as they go to darker shades. It is interesting to see the variation in the USA savings over time as in 2015 the savings reaches the highest point across all nations over that time.
+
+
+## Adjusted Net National Savings and Adjusted Net National Savings wih Emission Damages
+
+Next the team wants to look at adjusted savings and emission adjustments on savings across nations.
+```{r}
+pb = ggplot(g7, aes(x = Country.Name, y = ADJSAV))
+pb = pb + geom_bar(stat = "identity")
+pb = pb + aes(fill = Country.Name)
+pb = pb + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+pb
+```
+
+
+Figure 8a is a histogram of the adjusted net national savings for the G7 countries. 
+
+```{r}
+pb1 = ggplot(g7, aes(x = Country.Name, y = ADJEMIS))
+pb1 = pb1 + geom_bar(stat = "identity")
+pb1 = pb1 + aes(fill = Country.Name)
+pb1 = pb1 + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+pb1
+```
+
+
+Figure 8b is a histogram of the adjusted net national savings with emission damages. Emissions damage is the damage due to exposure of a country's population to ambient concentrations of particulates measuring less than 2.5 microns in diameter (PM2.5), ambient ozone pollution, and indoor concentrations of PM2.5 in households cooking with solid fuels. Damages are calculated as foregone labor income due to premature death. 
+
+While the USA still leads in adjusted savings including emission damages, the scale has changed in Figure 8b. This indicates that the USA has a greater decrease due to emissions in the adjusted net national savings than other nations. 
+
+
+The team wanted to further explore the relationship between adjusted net national savings and adjusted savings with emission damages. 
+
+```{r setup}
+library(knitr)
+library(rgl)
+knit_hooks$set(webgl = hook_webgl)
+```
+
+```{r testgl, webgl=TRUE}
+library(rayshader)
+
+pp = ggplot(g7, aes(x=ADJSAV, y=ADJEMIS)) +
+  geom_hex(bins = 20, size = 0.5, color = "black") 
+pp_plot = plot_gg(pp, width = 4, height = 4, scale = 300, multicore = TRUE)
+```
+
+
+Figure 9a looks at the relationship between adjusted savings and adjusted savings with emission damages and shows the country count represented in the third dimension. Here, the majority of countries fall within a given area on the graph except for the USA which is the points near the top of the graph. 
